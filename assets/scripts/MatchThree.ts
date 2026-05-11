@@ -32,96 +32,82 @@ export class MatchThree extends Component {
     onTouchStart(e: EventTouch) {
         if (this.isSwapping || this.isDragging) return;
 
-        //触摸坐标计算
         const p = e.getUILocation();
-        const cx = view.getVisibleSize().width / 2;
-        const cy = view.getVisibleSize().height / 2;
-        const x = Math.floor((p.x - cx) / BLOCK_SIZE + 4);
-        const y = Math.floor((p.y - cy) / BLOCK_SIZE + 4);
+        // 转换为节点坐标
+        const nodePos = this.node.inverseTransformPoint(new Vec3(), new Vec3(p.x, p.y, 0));
+
+        const x = Math.floor(nodePos.x / BLOCK_SIZE + 4);
+        const y = Math.floor(nodePos.y / BLOCK_SIZE + 4);
 
         if (x < 0 || x >= GRID || y < 0 || y >= GRID) return;
         const block = this.grid[y][x];
         if (!block) return;
 
-        //拖出
         this.isDragging = true;
         this.dragBlock = block;
-        this.originalPos = block.node.position.clone(); // 保存原始位置
-        block.node.setSiblingIndex(999); // 置顶
+        this.originalPos = block.node.position.clone();
+        this.dragBlock.node.setSiblingIndex(999);
     }
 
     onTouchMove(e: EventTouch) {
         if (!this.isDragging || !this.dragBlock) return;
 
-        const touchPos = e.getUILocation();
-        const cx = view.getVisibleSize().width / 2;
-        const cy = view.getVisibleSize().height / 2;
-
-        // 计算跟随
-        const nodeX = touchPos.x - cx;
-        const nodeY = touchPos.y - cy;
-        this.dragBlock.node.setPosition(nodeX, nodeY);
+        const p = e.getUILocation();
+        const nodePos = this.node.inverseTransformPoint(new Vec3(), new Vec3(p.x, p.y, 0));
+        this.dragBlock.node.setPosition(nodePos);
     }
 
     onTouchEnd(e: EventTouch) {
         if (!this.isDragging || !this.dragBlock) {
-            this.resetDrag();//重置
-            return;
-        }
-
-        //回弹
-        this.dragBlock.node.setPosition(this.originalPos);
-
-        const endPos = e.getUILocation();
-        const startPos = e.getStartLocation();
-        const dx = endPos.x - startPos.x;
-        const dy = endPos.y - startPos.y;
-
-        //不能拖太小
-        const minDragDis = 15;
-        if (Math.abs(dx) < minDragDis && Math.abs(dy) < minDragDis) {
             this.resetDrag();
             return;
         }
 
-        //拖到谁身上
+        this.dragBlock.node.setPosition(this.originalPos);
+
+        const startPos = e.getStartLocation();
+        const endPos = e.getUILocation();
+
+        const startNode = this.node.inverseTransformPoint(new Vec3(), new Vec3(startPos.x, startPos.y, 0));
+        const endNode = this.node.inverseTransformPoint(new Vec3(), new Vec3(endPos.x, endPos.y, 0));
+
+        const dx = endNode.x - startNode.x;
+        const dy = endNode.y - startNode.y;
+
+        // 最小拖动距离
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+            this.resetDrag();
+            return;
+        }
+
         let targetX = this.dragBlock.x;
         let targetY = this.dragBlock.y;
 
+        // 方向判断
         if (Math.abs(dx) > Math.abs(dy)) {
-            targetX += dx > 0 ? 1 : -1; // 左右
+            targetX += dx > 0 ? 1 : -1;
         } else {
-            targetY += dy > 0 ? 1 : -1; // 上下
+            targetY += dy > 0 ? 1 : -1;
         }
 
-        //不能是自己
+        // 拦截自己和越界
         if (targetX === this.dragBlock.x && targetY === this.dragBlock.y) {
-            this.resetDrag();
-            return;
+            this.resetDrag(); return;
+        }
+        if (targetX < 0 || targetX >= GRID || targetY < 0 || targetY >= GRID) {
+            this.resetDrag(); return;
         }
 
-        //重置
-        if (targetX < 0 || targetX >= GRID || targetY < 0 || targetY >= GRID) {
-            this.resetDrag();
-            return;
-        }
         const targetBlock = this.grid[targetY][targetX];
-        if (!targetBlock) {
-            this.resetDrag();
-            return;
-        }
+        if (!targetBlock) { this.resetDrag(); return; }
 
         this.trySwap(this.dragBlock, targetBlock);
-
-        //重置
         this.resetDrag();
     }
 
+    // 重置拖动
     resetDrag() {
         this.isDragging = false;
-        if (this.dragBlock) {
-            this.dragBlock.node.setPosition(this.originalPos);
-        }
         this.dragBlock = null;
     }
 
@@ -286,20 +272,20 @@ export class MatchThree extends Component {
 
     dropBlocks() {
         for (let x = 0; x < GRID; x++) {
+            let targetY = 0;
             for (let y = 0; y < GRID; y++) {
-                if (!this.grid[y][x]) {//空格子，掉落
-                    for (let yy = y + 1; yy < GRID; yy++) {
-                        if (this.grid[yy][x]) {//你在上面你掉
-                            const b = this.grid[yy][x]!;
-
-                            this.grid[y][x] = b;
-                            this.grid[yy][x] = null;
-
-                            b.y = y;
-                            b.node.setPosition((x - 3.5) * BLOCK_SIZE, (y - 3.5) * BLOCK_SIZE);//重新设置位置
-                            break;
-                        }
+                if (this.grid[y][x]) {
+                    if (targetY !== y) {
+                        const block = this.grid[y][x]!;
+                        this.grid[targetY][x] = block;
+                        this.grid[y][x] = null;
+                        block.y = targetY;
+                        block.node.setPosition(
+                            (x - 3.5) * BLOCK_SIZE,
+                            (targetY - 3.5) * BLOCK_SIZE
+                        );
                     }
+                    targetY++;
                 }
             }
         }
