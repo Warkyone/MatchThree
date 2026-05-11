@@ -15,7 +15,7 @@ export class MatchThree extends Component {
     private isSwapping = false;//交换中不给点
 
     onLoad() {
-        view.setDesignResolutionSize(1280, 720, ResolutionPolicy.SHOW_ALL);
+        view.setDesignResolutionSize(1280, 720, ResolutionPolicy.FIXED_HEIGHT);//手机上有点小，试试这个
 
         this.createGrid();
         input.on(Input.EventType.TOUCH_END, this.onTouch, this);
