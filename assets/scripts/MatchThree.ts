@@ -77,6 +77,13 @@ export class MatchThree extends Component {
         const dx = endPos.x - startPos.x;
         const dy = endPos.y - startPos.y;
 
+        //不能拖太小
+        const minDragDis = 15;
+        if (Math.abs(dx) < minDragDis && Math.abs(dy) < minDragDis) {
+            this.resetDrag();
+            return;
+        }
+
         //拖到谁身上
         let targetX = this.dragBlock.x;
         let targetY = this.dragBlock.y;
@@ -85,6 +92,12 @@ export class MatchThree extends Component {
             targetX += dx > 0 ? 1 : -1; // 左右
         } else {
             targetY += dy > 0 ? 1 : -1; // 上下
+        }
+
+        //不能是自己
+        if (targetX === this.dragBlock.x && targetY === this.dragBlock.y) {
+            this.resetDrag();
+            return;
         }
 
         //重置
