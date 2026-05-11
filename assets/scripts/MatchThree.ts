@@ -1,4 +1,4 @@
-import { _decorator, Component, instantiate, Node, view, ResolutionPolicy, input, Input, EventTouch, Vec3 } from 'cc';
+import { _decorator, Component, instantiate, Node, view, ResolutionPolicy, input, Input, EventTouch, Vec3, Vec2 } from 'cc';
 import { BlockItem } from './BlockItem';
 const { ccclass, property } = _decorator;
 
@@ -11,14 +11,105 @@ export class MatchThree extends Component {
     @property(Node) blockPrefab: Node = null!;//预制体插槽
     private grid: (BlockItem | null)[][] = Array(GRID).fill(null).map(() => Array(GRID).fill(null));
     /** 当前选中 */
-    private selected: BlockItem | null = null;
+    // private selected: BlockItem | null = null;
     private isSwapping = false;//交换中不给点
+
+    private isDragging = false;             // 是否正在拖动
+    private dragBlock: BlockItem | null = null;  // 当前拖动块
+    private originalPos = new Vec3();       //原始位置
 
     onLoad() {
         view.setDesignResolutionSize(1280, 720, ResolutionPolicy.FIXED_HEIGHT);//手机上有点小，试试这个
 
         this.createGrid();
-        input.on(Input.EventType.TOUCH_END, this.onTouch, this);
+        // input.on(Input.EventType.TOUCH_END, this.onTouch, this);
+
+        input.on(Input.EventType.TOUCH_START, this.onTouchStart, this);
+        input.on(Input.EventType.TOUCH_MOVE, this.onTouchMove, this);
+        input.on(Input.EventType.TOUCH_END, this.onTouchEnd, this);
+    }
+
+    onTouchStart(e: EventTouch) {
+        if (this.isSwapping || this.isDragging) return;
+
+        //触摸坐标计算
+        const p = e.getUILocation();
+        const cx = view.getVisibleSize().width / 2;
+        const cy = view.getVisibleSize().height / 2;
+        const x = Math.floor((p.x - cx) / BLOCK_SIZE + 4);
+        const y = Math.floor((p.y - cy) / BLOCK_SIZE + 4);
+
+        if (x < 0 || x >= GRID || y < 0 || y >= GRID) return;
+        const block = this.grid[y][x];
+        if (!block) return;
+
+        //拖出
+        this.isDragging = true;
+        this.dragBlock = block;
+        this.originalPos = block.node.position.clone(); // 保存原始位置
+        block.node.setSiblingIndex(999); // 置顶
+    }
+
+    onTouchMove(e: EventTouch) {
+        if (!this.isDragging || !this.dragBlock) return;
+
+        const touchPos = e.getUILocation();
+        const cx = view.getVisibleSize().width / 2;
+        const cy = view.getVisibleSize().height / 2;
+
+        // 计算跟随
+        const nodeX = touchPos.x - cx;
+        const nodeY = touchPos.y - cy;
+        this.dragBlock.node.setPosition(nodeX, nodeY);
+    }
+
+    onTouchEnd(e: EventTouch) {
+        if (!this.isDragging || !this.dragBlock) {
+            this.resetDrag();//重置
+            return;
+        }
+
+        //回弹
+        this.dragBlock.node.setPosition(this.originalPos);
+
+        const endPos = e.getUILocation();
+        const startPos = e.getStartLocation();
+        const dx = endPos.x - startPos.x;
+        const dy = endPos.y - startPos.y;
+
+        //拖到谁身上
+        let targetX = this.dragBlock.x;
+        let targetY = this.dragBlock.y;
+
+        if (Math.abs(dx) > Math.abs(dy)) {
+            targetX += dx > 0 ? 1 : -1; // 左右
+        } else {
+            targetY += dy > 0 ? 1 : -1; // 上下
+        }
+
+        //重置
+        if (targetX < 0 || targetX >= GRID || targetY < 0 || targetY >= GRID) {
+            this.resetDrag();
+            return;
+        }
+        const targetBlock = this.grid[targetY][targetX];
+        if (!targetBlock) {
+            this.resetDrag();
+            return;
+        }
+
+        this.trySwap(this.dragBlock, targetBlock);
+
+        //重置
+        this.resetDrag();
+    }
+
+    resetDrag() {
+        this.isDragging = false;
+        if (this.dragBlock) {
+            this.dragBlock.node.setPosition(this.originalPos);
+        }
+        this.dragBlock = null;
     }
 
     createGrid() {
@@ -35,41 +126,43 @@ export class MatchThree extends Component {
                 this.grid[y][x] = block;//存入棋盘
             }
         }
+
+        this.matchLoop();//初始消除避免出现四个黄
     }
 
-    onTouch(e: EventTouch) {
-        if (this.isSwapping) return;
-        
-        const p = e.getUILocation();
-        // 屏幕中心点坐标
-        const cx = view.getVisibleSize().width / 2;
-        const cy = view.getVisibleSize().height / 2;
+    // onTouch(e: EventTouch) {
+    //     if (this.isSwapping) return;
 
-        //点第几格
-        const x = Math.floor((p.x - cx) / BLOCK_SIZE + 4);
-        const y = Math.floor((p.y - cy) / BLOCK_SIZE + 4);
+    //     const p = e.getUILocation();
+    //     // 屏幕中心点坐标
+    //     const cx = view.getVisibleSize().width / 2;
+    //     const cy = view.getVisibleSize().height / 2;
 
-        // 越界
-        if (x < 0 || x >= GRID || y < 0 || y >= GRID) return;
+    //     //点第几格
+    //     const x = Math.floor((p.x - cx) / BLOCK_SIZE + 4);
+    //     const y = Math.floor((p.y - cy) / BLOCK_SIZE + 4);
 
-        const block = this.grid[y][x];
-        if (!block) return;
+    //     // 越界
+    //     if (x < 0 || x >= GRID || y < 0 || y >= GRID) return;
 
-        // 首次选中
-        if (!this.selected) {
-            this.selected = block;
-            block.node.scale = new Vec3(1.2, 1.2, 1);
-            return;
-        }
+    //     const block = this.grid[y][x];
+    //     if (!block) return;
 
-        // 相邻交换
-        if (this.isNear(block, this.selected)) {
-            this.trySwap(block, this.selected);
-        }
+    //     // 首次选中
+    //     if (!this.selected) {
+    //         this.selected = block;
+    //         block.node.scale = new Vec3(1.2, 1.2, 1);
+    //         return;
+    //     }
 
-        this.selected.node.scale = Vec3.ONE;
-        this.selected = null;
-    }
+    //     // 相邻交换
+    //     if (this.isNear(block, this.selected)) {
+    //         this.trySwap(block, this.selected);
+    //     }
+
+    //     this.selected.node.scale = Vec3.ONE;
+    //     this.selected = null;
+    // }
 
 
     isNear(a: BlockItem, b: BlockItem): boolean {
@@ -141,8 +234,8 @@ export class MatchThree extends Component {
         for (let y = 0; y < GRID; y++) {
             for (let x = 0; x <= GRID - 3; x++) {
                 const b1 = this.grid[y][x];
-                const b2 = this.grid[y][x+1];
-                const b3 = this.grid[y][x+2];
+                const b2 = this.grid[y][x + 1];
+                const b3 = this.grid[y][x + 2];
                 if (!b1 || !b2 || !b3) continue;//空格
                 if (b1.type === b2.type && b2.type === b3.type) {
                     set.add(b1);
@@ -156,8 +249,8 @@ export class MatchThree extends Component {
         for (let x = 0; x < GRID; x++) {
             for (let y = 0; y <= GRID - 3; y++) {
                 const b1 = this.grid[y][x];
-                const b2 = this.grid[y+1][x];
-                const b3 = this.grid[y+2][x];
+                const b2 = this.grid[y + 1][x];
+                const b3 = this.grid[y + 2][x];
                 if (!b1 || !b2 || !b3) continue;
                 if (b1.type === b2.type && b2.type === b3.type) {
                     set.add(b1);
@@ -188,7 +281,7 @@ export class MatchThree extends Component {
 
                             this.grid[y][x] = b;
                             this.grid[yy][x] = null;
-                            
+
                             b.y = y;
                             b.node.setPosition((x - 3.5) * BLOCK_SIZE, (y - 3.5) * BLOCK_SIZE);//重新设置位置
                             break;
