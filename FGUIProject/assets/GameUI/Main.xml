@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component size="800,600">
+  <displayList>
+    <text id="n0_ojoq" name="txtScore" xy="78,40" size="40,19" fontSize="12" text=""/>
+    <component id="n1_ojoq" name="gridContainer" src="ojoq1" fileName="gridContainer.xml" xy="0,0"/>
+  </displayList>
+</component>

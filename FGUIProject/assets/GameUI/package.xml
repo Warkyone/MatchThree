@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<packageDescription id="kcpx01wi">
+  <resources>
+    <component id="qkrg0" name="Main.xml" path="/" exported="true"/>
+    <component id="ojoq1" name="gridContainer.xml" path="/"/>
+  </resources>
+  <publish name="GameUI" path="C:\Users\warkyone\Desktop\MatchThree\assets\resources" packageCount="2"/>
+</packageDescription>
